@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>简历匣 · 资料工作台</title><link rel="stylesheet" href="styles.css"></head>
+<body class="workspace">
+  <aside class="sidebar">
+    <a class="brand" href="workspace.html"><span class="brand-mark">简</span><span>简历匣<small>JIANLI · YOUR NEXT CHAPTER</small></span></a>
+    <div class="sidebar-label">当前简历</div>
+    <label class="sr-only" for="profile-select">选择简历版本</label><select id="profile-select" class="version-select"></select>
+    <button id="new-profile" class="new-version">＋ 新建简历版本</button>
+    <div class="sidebar-label nav-label">我的资料库</div><nav id="navigation" aria-label="资料分类"></nav>
+    <div class="sidebar-bottom"><div class="local-badge"><span class="status-dot"></span> 本地保存，随时取用</div><p>准备好自己的故事，<br>去遇见下一种可能。</p><span class="version-number">简历匣 / 0.2.0</span></div>
+  </aside>
+  <div class="workspace-body">
+    <header class="topbar"><div class="breadcrumb">我的资料库 <span>/</span> <span id="breadcrumb-section">个人信息</span></div><div class="header-actions"><span id="save-state" role="status">正在读取</span><button class="button subtle" id="import-button">导入资料</button><button class="button outline" id="export-button">备份导出 ↗</button></div></header>
+    <main class="main-area">
+      <div class="page-heading"><div><div class="eyebrow">A LITTLE ABOUT YOU</div><h1 id="section-title">个人信息<span class="heading-dot">.</span></h1><p id="section-subtitle">让每一次自我介绍，从这里开始。</p></div><span class="chapter" id="chapter">01 / 05</span></div>
+      <div id="preview-notice" class="notice hidden">当前是网页预览模式，数据保存在此浏览器。安装扩展后，可在招聘网页使用快捷填写。</div>
+      <div class="content-columns"><div class="editor-column">
+        <div class="profile-toolbar"><label for="profile-title">版本名称</label><input id="profile-title" maxlength="80" placeholder="给这份简历起个名字"><button id="duplicate-profile" class="text-button">复制版本</button></div>
+        <div id="editor"></div>
+        <div class="editor-footer"><span>资料变更会自动保存到本机</span><button id="delete-profile" class="text-button danger">删除此版本</button></div>
+      </div><aside class="right-column">
+        <section class="identity-card"><div class="card-eyebrow">YOUR PROFILE <span>↗</span></div><div class="avatar" id="avatar">你</div><h2 id="identity-name">等待你的名字</h2><p id="identity-position">下一站，由你定义</p><div id="identity-tags" class="identity-tags"></div><div class="identity-divider"></div><div class="completion-row"><span>核心资料完整度</span><strong id="completion-text">0%</strong></div><div class="progress-track"><div id="completion-bar"></div></div><p class="card-caption">姓名、联系方式、求职意向、学历与技能</p></section>
+        <section class="tip-card"><span class="tip-number">01 — 02 — 03</span><h3>填一次，少重复。</h3><p>整理资料后，在招聘网页点击工具栏中的简历匣。</p><ol><li>打开侧栏，选择简历</li><li>点击网页输入框，查看高亮资料</li><li>核对后填入，继续你的申请</li></ol><a class="tip-link" href="../demo/recruitment.html" id="demo-link" target="_blank">在练习表单试一试 <span>↗</span></a></section>
+        <div class="privacy-note" id="privacy-note"></div>
+      </aside></div>
+    </main><footer class="page-footer"><span>每一段经历，都值得被好好讲述。</span><span>MADE FOR YOUR NEXT MOVE</span></footer>
+  </div>
+  <input type="file" id="import-file" accept=".json,application/json" hidden>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="workspace.mjs"></script>
+</body></html>

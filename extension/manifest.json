@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "简历匣 · 求职填写助手",
+  "version": "0.2.0",
+  "description": "整理个人简历资料，预览并快捷填写招聘网页。资料保存在本机。",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "activeTab", "scripting", "sidePanel"],
+  "action": { "default_title": "打开简历匣侧栏" },
+  "side_panel": { "default_path": "panel.html" },
+  "options_page": "workspace.html",
+  "background": { "service_worker": "background.js", "type": "module" },
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'" }
+}

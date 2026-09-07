@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "activeId": "example-profile",
+  "profiles": [
+    {
+      "id": "example-profile",
+      "title": "示例简历 · 虚构数据",
+      "updatedAt": "",
+      "basic": {
+        "name": "林小满",
+        "email": "xiaoman@example.com",
+        "position": "前端开发工程师"
+      },
+      "education": [
+        {
+          "school": "示例大学",
+          "college": "软件学院",
+          "major": "软件工程",
+          "degree": "硕士",
+          "gpa": "3.8 / 4.0",
+          "ranking": "5 / 120",
+          "advisor": "示例导师",
+          "start": "2025-09",
+          "end": "2027-06",
+          "description": "本条为虚构示例，请替换为自己的真实教育经历。"
+        }
+      ],
+      "work": [
+        {
+          "company": "示例科技",
+          "role": "前端实习生",
+          "start": "2026-04",
+          "end": "2026-08",
+          "description": "虚构示例：参与前端组件开发与交互优化。"
+        }
+      ],
+      "projects": [],
+      "extras": {
+        "skills": "示例：JavaScript / TypeScript / Vue 3。请按真实熟练程度修改。"
+      }
+    }
+  ]
+}

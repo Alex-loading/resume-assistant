@@ -1,0 +1,13 @@
+import { mkdir, cp, rm, readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+const root=fileURLToPath(new URL('..',import.meta.url));
+const dist=root+'dist/';
+const {version}=JSON.parse(await readFile(root+'extension/manifest.json','utf8'));
+const filename=`简历匣-v${version}.zip`;
+await mkdir(dist,{recursive:true});
+await rm(dist+'resume-assistant',{recursive:true,force:true});
+await cp(root+'extension',dist+'resume-assistant',{recursive:true});
+await rm(dist+filename,{force:true});
+execFileSync('zip',['-q','-r',filename,'resume-assistant'],{cwd:dist});
+console.log(`已生成 dist/${filename}（仅包含扩展文件，不含个人资料）`);

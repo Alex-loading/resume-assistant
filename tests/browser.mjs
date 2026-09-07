@@ -1,0 +1,221 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { createServer } from '../scripts/serve.mjs';
+import { createStore, createRecord, KEY } from '../extension/lib/schema.mjs';
+import { nativePanel } from './native-panel.mjs';
+const { chromium } = createRequire(import.meta.url)('playwright');
+const root=fileURLToPath(new URL('..',import.meta.url));
+await mkdir(root+'artifacts',{recursive:true});
+const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+const origin=`http://127.0.0.1:${server.address().port}`;
+let context,panel;const checks=[];const errors=[];
+const checked=name=>{checks.push(name);console.log('PASS '+name);};
+const store=createStore();const profile=store.profiles[0];profile.title='2027 届 · 前端开发';
+Object.assign(profile.basic,{name:'林小满',phone:'13800000000',email:'xiaoman@example.com',position:'前端开发工程师',city:'上海',gender:'女',birthday:'2003-05-12'});
+profile.education=[{...createRecord('education'),school:'示例大学',major:'软件工程',degree:'硕士',start:'2025-09',end:'2027-06'}];
+profile.work=[{...createRecord('work'),company:'示例科技',role:'前端实习生',start:'2026-04',end:'2026-08',description:'参与前端组件开发与性能优化。'}];
+profile.extras.skills='JavaScript / TypeScript / Vue 3\n前端工程与交互设计';profile.extras.summary='专注于前端开发，喜欢把复杂的问题变成清楚的界面。';
+try {
+  context=await chromium.launchPersistentContext('',{
+    ...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{}),
+    headless:false,viewport:{width:1440,height:1050},ignoreDefaultArgs:['--disable-extensions'],args:['--enable-unsafe-extension-debugging']
+  });
+  context.on('page',page=>page.on('pageerror',error=>errors.push(error.message)));
+  context.setDefaultTimeout(10000);
+  const cdp=await context.browser().newBrowserCDPSession();
+  const {id}=await cdp.send('Extensions.loadUnpacked',{path:root+'extension'});
+  const base=`chrome-extension://${id}`;
+  checked('加载原始 Manifest V3 扩展（无测试权限修改）');
+  const app=await context.newPage();await app.goto(base+'/workspace.html');
+  await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();
+  await app.evaluate(async({key,store})=>chrome.storage.local.set({[key]:store}),{key:KEY,store});await app.reload();
+  await app.locator('#identity-name').filter({hasText:'林小满'}).waitFor();
+  await app.getByLabel('姓名',{exact:true}).fill('林小满同学');
+  await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();await app.reload();
+  assert.equal(await app.getByLabel('姓名',{exact:true}).inputValue(),'林小满同学');
+  await app.getByLabel('姓名',{exact:true}).fill('林小满');await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();
+  checked('工作台资料编辑、自动保存与重载恢复');
+  const concurrent=structuredClone(store);concurrent.profiles[0].basic.name='外部保存';
+  await app.evaluate(async({key,value})=>chrome.storage.local.set({[key]:value}),{key:KEY,value:concurrent});
+  await app.reload();assert.equal(await app.getByLabel('姓名',{exact:true}).inputValue(),'外部保存');
+  await app.getByLabel('姓名',{exact:true}).fill('林小满');await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();
+  checked('未修改页面关闭/重载时不覆盖更新的存储');
+  await app.getByRole('button',{name:'教育经历',exact:true}).click();
+  const educationDetails={GPA:'3.8 / 4.0',成绩排名:'5 / 120',学院:'软件学院',导师:'示例导师'};
+  for(const [label,value] of Object.entries(educationDetails)) await app.getByLabel(label,{exact:true}).fill(value);
+  await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();await app.reload();
+  await app.getByRole('button',{name:'教育经历',exact:true}).click();
+  for(const [label,value] of Object.entries(educationDetails)) assert.equal(await app.getByLabel(label,{exact:true}).inputValue(),value);
+  await app.screenshot({path:root+'artifacts/education.png',fullPage:true});
+  await app.getByRole('button',{name:'添加教育经历',exact:true}).click();
+  assert.equal(await app.locator('.form-card').count(),2);
+  app.once('dialog',dialog=>dialog.accept());await app.locator('.form-card').last().getByRole('button',{name:'删除',exact:true}).click();
+  assert.equal(await app.locator('.form-card').count(),1);
+  await app.getByRole('button',{name:'个人信息',exact:true}).click();
+  await app.getByRole('button',{name:'复制版本',exact:true}).click();
+  assert.equal(await app.locator('#profile-select option').count(),2);
+  await app.getByLabel('姓名',{exact:true}).fill('副本姓名');await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();
+  await app.locator('#profile-select').selectOption(store.activeId);
+  assert.equal(await app.getByLabel('姓名',{exact:true}).inputValue(),'林小满');
+  checked('多条经历增删和独立简历版本');
+  await app.locator('#import-file').setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{bad')});
+  await app.locator('#toast').filter({hasText:'导入失败'}).waitFor();assert.equal(await app.locator('#profile-select option').count(),2);
+  const incoming=structuredClone(store);incoming.profiles[0].title='导入的资料';
+  await app.locator('#import-file').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(incoming))});
+  await app.locator('#toast').filter({hasText:'已导入'}).waitFor();assert.equal(await app.locator('#profile-select option').count(),3);
+  const downloadPromise=app.waitForEvent('download');await app.getByRole('button',{name:'备份导出'}).click();
+  const download=await downloadPromise;const exported=JSON.parse(await readFile(await download.path(),'utf8'));assert.equal(exported.profiles.length,3);
+  checked('错误导入保护、追加导入和完整 JSON 备份');
+  await app.locator('#profile-select').selectOption(store.activeId);await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();
+  await app.screenshot({path:root+'artifacts/workspace.png',fullPage:true});
+  await app.setViewportSize({width:680,height:980});assert.equal(await app.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await app.setViewportSize({width:1440,height:1050});checked('桌面截图和窄屏布局无横向溢出');
+  const demo=await context.newPage();await demo.goto(origin+'/demo/recruitment.html');
+  const tabCDP=await context.newCDPSession(demo);const {targetInfo}=await tabCDP.send('Target.getTargetInfo');
+  // Real toolbar activation grants activeTab. The original manifest has no host permissions.
+  const allTargets=await cdp.send('Target.getTargets',{filter:[{type:'tab'},{exclude:true}]});
+  const tabTarget=allTargets.targetInfos.find(target=>target.targetId===targetInfo.parentId || target.url===demo.url());
+  if(!tabTarget)throw new Error('无法找到练习页面对应的浏览器标签目标：'+JSON.stringify({targetInfo,allTargets}));
+  await cdp.send('Extensions.triggerAction',{id,targetId:tabTarget.targetId});
+  panel=await nativePanel(cdp,base+'/panel.html',errors);
+  await panel.locator('#connection-dot.connected').waitFor();
+  assert.equal(await panel.getByRole('tab',{name:'快捷复制'}).getAttribute('aria-selected'),'true');
+  const worker=context.serviceWorkers()[0];
+  assert.ok((await worker.evaluate(()=>chrome.runtime.getContexts({contextTypes:['SIDE_PANEL']}))).length);
+  checked('工具栏真实打开原生常驻侧栏，默认显示快捷复制');
+  async function focusOn(selector,key) {
+    await demo.locator(selector).focus();
+    await panel.locator(`.copy-item.matched[data-field-key="${key}"]`).waitFor();
+  }
+  async function fillOne(selector,key,value) {
+    await focusOn(selector,key);
+    await panel.locator(`.copy-item[data-field-key="${key}"] .insert-field`).click();
+    await panel.locator('#operation-status').filter({hasText:'已填入'}).waitFor();
+    assert.equal(await demo.locator(selector).inputValue(),value);
+  }
+  await demo.locator('[name=fullName]').click();
+  await panel.locator('.copy-item.matched[data-field-key="basic.0.name"]').waitFor();
+  assert.equal(await panel.locator('.copy-item.matched').count(),1);
+  assert.equal(await panel.getByRole('tab',{name:'快捷复制'}).getAttribute('aria-selected'),'true');
+  await panel.screenshot({path:root+'artifacts/sidepanel-focus.png'});
+  assert.equal(panel.isClosed(),false);
+  checked('点击网页输入框自动匹配、高亮并置顶资料，侧栏保持可见');
+  await fillOne('[name=fullName]','basic.0.name','林小满');
+  assert.equal(await demo.locator('[name=fullName]').inputValue(),'林小满');
+  await demo.locator('[name=fullName]').fill('用户后续修改');
+  await panel.getByRole('button',{name:'撤销上次'}).click();
+  await panel.locator('#operation-status').filter({hasText:'保留 1 项'}).waitFor();
+  assert.equal(await demo.locator('[name=fullName]').inputValue(),'用户后续修改');
+  await fillOne('[name=mobile]','basic.0.phone','13800000000');
+  await panel.getByRole('button',{name:'撤销上次'}).click();
+  await panel.locator('#operation-status').filter({hasText:'已撤销 1 项'}).waitFor();
+  assert.equal(await demo.locator('[name=mobile]').inputValue(),'');
+  checked('单字段填写和撤销，保留用户后续修改');
+  await focusOn('[name=currentCity]','basic.0.city');
+  assert.equal(await panel.locator('.copy-item.matched .insert-field').isDisabled(),true);
+  assert.equal(await demo.locator('[name=currentCity]').inputValue(),'南京');
+  await panel.locator('#overwrite').check();await panel.locator('.copy-item.matched .insert-field').click();
+  await panel.locator('#operation-status').filter({hasText:'已填入'}).waitFor();
+  assert.equal(await demo.locator('[name=currentCity]').inputValue(),'上海');
+  await panel.getByRole('button',{name:'撤销上次'}).click();await panel.locator('#operation-status').filter({hasText:'已撤销 1 项'}).waitFor();
+  assert.equal(await demo.locator('[name=currentCity]').inputValue(),'南京');
+  checked('当前字段已有内容保护、明确开启覆盖和还原');
+  await fillOne('[name=degree]','education.0.degree','master');
+  await fillOne('[name=gender]','basic.0.gender','female');
+  for(const [name,key,value] of [['gpa','gpa','3.8 / 4.0'],['academicRanking','ranking','5 / 120'],['college','college','软件学院'],['advisor','advisor','示例导师']]) await fillOne(`[name=${name}]`,`education.0.${key}`,value);
+  checked('学历、性别下拉及 GPA、排名、学院、导师逐项定位填写');
+  await demo.locator('[name=emergencyName]').click();await panel.waitForFunction(()=>document.querySelector('#focus-label').textContent==='紧急联系人姓名');
+  assert.equal(await panel.locator('.insert-field').count(),0);
+  assert.equal(await demo.locator('[name=emergencyName]').inputValue(),'');
+  await demo.locator('[name=password]').fill('do-not-read-this');await panel.waitForFunction(()=>document.querySelector('#focus-label').textContent==='登录密码');
+  assert.equal(await panel.locator('.insert-field').count(),0);
+  assert.equal((await panel.locator('body').innerText()).includes('do-not-read-this'),false);
+  assert.equal(await demo.locator('#result').textContent(),'尚未检查');
+  checked('切换到受限字段会清除旧匹配，不读取密码、不自动提交');
+  await app.evaluate(async({key,record})=>{const data=(await chrome.storage.local.get(key))[key];data.profiles.find(p=>p.id===data.activeId).education.push(record);await chrome.storage.local.set({[key]:data});},{key:KEY,record:{...createRecord('education'),school:'本科示例大学',degree:'本科'}});
+  await demo.locator('[name=school]').click();await panel.waitForFunction(()=>document.querySelectorAll('.copy-item.matched').length===2);
+  assert.equal(await panel.locator('#field-source').inputValue(),'');
+  await panel.locator('.copy-item[data-field-key="education.1.school"] .insert-field').click();await panel.locator('#operation-status').filter({hasText:'已填入'}).waitFor();
+  assert.equal(await demo.locator('[name=school]').inputValue(),'本科示例大学');
+  checked('工作台更新实时同步，多条教育经历高亮候选并手动选定');
+  await demo.evaluate(()=>{const label=document.createElement('label');label.textContent='补充备注';const input=document.createElement('input');input.id='unknown-field';label.append(input);document.querySelector('form').append(label);});
+  await demo.locator('#unknown-field').click();await panel.waitForFunction(()=>document.querySelector('#focus-label').textContent==='补充备注');
+  assert.equal(await panel.locator('.copy-item.matched').count(),0);
+  await panel.getByRole('tab',{name:'网页填写'}).click();await panel.locator('#field-source').selectOption('basic.0.name');await panel.getByRole('button',{name:'填入当前输入框',exact:true}).click();await panel.locator('#operation-status').filter({hasText:'已填入'}).waitFor();
+  assert.equal(await demo.locator('#unknown-field').inputValue(),'林小满');
+  await panel.getByRole('tab',{name:'快捷复制'}).click();await panel.locator('#search').fill('专业技能');assert.equal(await panel.locator('.copy-item').count(),1);await panel.locator('#search').fill('');
+  checked('动态输入框识别、无匹配时手动映射和快捷检索');
+  const other=await context.newPage();await other.goto(origin+'/demo/recruitment.html?other=1');
+  await panel.waitForFunction(()=>!document.querySelector('.copy-item.matched'));
+  assert.equal(await panel.locator('#fill').isDisabled(),true);
+  assert.equal(panel.isClosed(),false);
+  await other.close();await demo.bringToFront();
+  await panel.locator('#connection-dot.connected').waitFor();
+  await demo.locator('[name=email]').click();await panel.locator('.copy-item.matched[data-field-key="basic.0.email"]').waitFor();
+  checked('切换标签清除旧目标，返回已授权页面后恢复监听');
+  // Direct engine cases complement the real extension pipeline above.
+  await demo.evaluate(()=>{
+    const form=document.querySelector('form');
+    const wrapper=document.createElement('div');wrapper.innerHTML='<label>姓名<input id="tracked"></label><label>手机号码<input id="too-short" maxlength="3"></label><label>入学时间<input id="full-date" type="date"></label><input id="hidden" aria-label="姓名" style="display:none"><fieldset disabled><label>姓名<input id="disabled-parent"></label></fieldset><div role="combobox" tabindex="0" aria-label="学校"></div>';
+    form.append(wrapper);
+    const tracked=document.querySelector('#tracked');window.events=[];
+    Object.defineProperty(tracked,'value',{configurable:true,get(){return Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').get.call(this)},set(){window.instanceSetterUsed=true}});
+    tracked.addEventListener('input',()=>window.events.push('input'));tracked.addEventListener('change',()=>window.events.push('change'));
+    const shadow=document.createElement('div');form.append(shadow);shadow.attachShadow({mode:'open'}).innerHTML='<label>姓名<input id="shadow-name"></label>';
+    const frame=document.createElement('iframe');frame.id='same-origin';frame.srcdoc='<label>姓名<input id="frame-name"></label>';form.append(frame);
+    const hiddenFrame=document.createElement('iframe');hiddenFrame.style.display='none';hiddenFrame.srcdoc='<label>姓名<input id="hidden-frame-name"></label>';form.append(hiddenFrame);
+  });
+  await demo.frameLocator('#same-origin').locator('#frame-name').waitFor();
+  await demo.locator('#shadow-name').click();await panel.locator('.copy-item.matched[data-field-key="basic.0.name"]').waitFor();
+  await panel.locator('.copy-item.matched .insert-field').click();await panel.locator('#operation-status').filter({hasText:'已填入'}).waitFor();
+  assert.equal(await demo.locator('#shadow-name').inputValue(),'林小满');
+  await demo.frameLocator('#same-origin').locator('#frame-name').click();
+  await panel.waitForFunction(()=>!document.querySelector('#focus-current').textContent);
+  await panel.locator('.copy-item.matched .insert-field').click();await panel.locator('#operation-status').filter({hasText:'已填入'}).waitFor();
+  assert.equal(await demo.frameLocator('#same-origin').locator('#frame-name').inputValue(),'林小满');
+  await demo.locator('#shadow-name').fill('');await demo.frameLocator('#same-origin').locator('#frame-name').fill('');
+  checked('动态 Shadow DOM 和同源 iframe 点击可驱动真实侧栏匹配填写');
+  await demo.addScriptTag({path:root+'extension/content.js'});
+  const scan=await demo.evaluate(()=>__jianliBridge({action:'scan'}));
+  assert.equal(scan.fields.some(f=>['hidden','disabled-parent','hidden-frame-name'].includes(f.id)),false);
+  assert.ok(scan.fields.some(f=>f.id==='shadow-name'));assert.ok(scan.fields.some(f=>f.id==='frame-name'));
+  const field=id=>scan.fields.find(f=>f.id===id);
+  const edgeResult=await demo.evaluate(items=>__jianliBridge({action:'fill',items}),[
+    {token:field('tracked').token,value:'原生事件'}, {token:field('too-short').token,value:'13800000000'}, {token:field('full-date').token,value:'2025-09'},
+    {token:field('shadow-name').token,value:'影子表单'}, {token:field('frame-name').token,value:'嵌入表单'}
+  ]);
+  assert.deepEqual(edgeResult.results.map(r=>r.ok),[true,false,false,true,true]);
+  assert.deepEqual(await demo.evaluate(()=>window.events),['input','change']);assert.equal(await demo.evaluate(()=>Boolean(window.instanceSetterUsed)),false);
+  checked('原生 setter/事件、字数和日期限制、Shadow DOM、同源及隐藏 iframe');
+  await demo.evaluate(()=>document.querySelector('#tracked').closest('label').firstChild.textContent='新的字段');
+  const stale=await demo.evaluate(item=>__jianliBridge({action:'fill',overwrite:true,items:[item]}),{token:field('tracked').token,value:'不能填入'});assert.equal(stale.results[0].ok,false);
+  await demo.evaluate(()=>history.pushState({},'',location.pathname+'?changed=1'));
+  const navigated=await demo.evaluate(async()=>{try{await __jianliBridge({action:'fill',items:[]});return false;}catch{return true;}});assert.equal(navigated,true);
+  checked('重新标注字段与单页应用导航后拒绝旧扫描');
+  await demo.goto(origin+'/demo/recruitment.html?after-navigation=1');await panel.locator('#connection-dot.connected').waitFor();
+  await demo.locator('[name=fullName]').click();await demo.locator('[name=mobile]').click();await demo.locator('[name=email]').click();
+  await panel.locator('.copy-item.matched[data-field-key="basic.0.email"]').waitFor();
+  await panel.locator('.copy-item.matched .insert-field').click();await panel.locator('#operation-status').filter({hasText:'已填入'}).waitFor();
+  assert.equal(await demo.locator('[name=email]').inputValue(),'xiaoman@example.com');
+  assert.equal(await demo.locator('[name=fullName]').inputValue(),'');assert.equal(await demo.locator('[name=mobile]').inputValue(),'');
+  assert.equal(panel.isClosed(),false);
+  checked('页面导航自动重连，快速切换输入框只填写最后选中项');
+  const isolatedState=()=>worker.evaluate(async url=>{const [tab]=await chrome.tabs.query({url});return (await chrome.scripting.executeScript({target:{tabId:tab.id},func:()=>globalThis.__jianliBridge({action:'focused'})}))[0].result;},demo.url());
+  const beforeClose=await isolatedState();await panel.close();
+  await demo.locator('[name=fullName]').click();
+  // A script round trip allows the background's port-disconnect cleanup to settle.
+  await isolatedState();await demo.locator('[name=mobile]').click();
+  const afterClose=await isolatedState();assert.equal(afterClose.sequence,beforeClose.sequence);
+  checked('关闭侧栏会释放输入监听');
+  assert.deepEqual(errors,[]);checked('浏览器页面无未捕获 JavaScript 错误');
+  await writeFile(root+'artifacts/browser-results.json',JSON.stringify({date:new Date().toISOString(),browser:await context.browser().version(),checks,errors},null,2));
+  console.log(`All ${checks.length} browser checks passed.`);
+} catch(error) {
+  if(panel)try{await panel.screenshot({path:root+'artifacts/failure-panel.png'});console.error('PANEL',await panel.locator('body').innerText());}catch{}
+  if(context) for(const [index,page] of context.pages().entries()) {
+    try { await page.screenshot({path:root+`artifacts/failure-${index}.png`});console.error('PAGE',page.url(),(await page.locator('body').innerText()).slice(0,1600)); } catch {}
+  }
+  console.error('PAGE_ERRORS',errors);throw error;
+} finally {if(context)await context.close();await new Promise(resolve=>server.close(resolve));}
