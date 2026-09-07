@@ -11,7 +11,11 @@
     <div id="connection-help" class="connection-help hidden"></div>
     <section id="focus-card" class="focus-card" aria-live="polite"><div class="focus-eyebrow">跟随你的输入位置</div><h1 id="focus-label">点击网页中的输入框</h1><p id="focus-hint">对应资料会自动高亮，在侧栏点击“填入”即可。</p><p id="focus-current" class="focus-current hidden"></p></section>
     <section id="copy-panel" role="tabpanel" aria-labelledby="copy-tab"><label class="sr-only" for="search">搜索资料</label><input id="search" class="search-input" type="search" placeholder="搜索姓名、学校、项目…"><div id="copy-list"></div></section>
-    <section id="fill-panel" class="hidden" role="tabpanel" aria-labelledby="fill-tab"><label class="field" for="field-source">用于填写的资料<select id="field-source" disabled><option value="">先点击网页输入框</option></select></label><div id="field-preview" class="field-preview">选择资料后在这里预览。</div><button id="fill" class="button primary wide" disabled>填入当前输入框</button><p class="panel-help">仅写入当前选中的网页字段。你也可以在快捷复制中选择资料填入。</p></section>
+    <section id="fill-panel" class="hidden" role="tabpanel" aria-labelledby="fill-tab">
+      <label class="field" for="field-source">用于填写的资料<select id="field-source" aria-describedby="source-scope" disabled><option value="">先点击网页输入框</option></select></label>
+      <div class="source-controls"><span id="source-scope" role="status"></span><button id="source-toggle" class="text-button hidden" aria-controls="field-source" type="button">从所有字段中选择</button></div>
+      <div id="field-preview" class="field-preview">选择资料后在这里预览。</div><button id="fill" class="button primary wide" disabled>填入当前输入框</button><p class="panel-help">仅写入当前选中的网页字段。你也可以在快捷复制中选择资料填入。</p>
+    </section>
   </main>
   <footer class="panel-footer"><label class="fill-options"><input type="checkbox" id="overwrite" disabled>允许覆盖当前输入框的已有内容</label><div class="footer-row"><span id="operation-status" role="status">本机资料 · 提交由你完成</span><button id="undo" class="button outline" disabled>撤销上次</button></div></footer>
   <div id="toast" class="toast" role="status" aria-live="polite"></div><script type="module" src="panel.mjs"></script>

@@ -4,6 +4,7 @@ import { matchField } from './lib/matcher.mjs';
 import { $, el, icon, toast, copy } from './lib/ui.mjs';
 
 let store, fields = [], target = null, focus = null, selectedKey = '', windowId;
+let showAllSources = false;
 let generation = 0, focusSequence = -1, busy = false, canUndo = false, port, closed = false;
 const operation = text => { $('#operation-status').textContent = text; };
 const fieldName = descriptor => descriptor?.label || descriptor?.placeholder || descriptor?.name || '未命名字段';
@@ -20,7 +21,7 @@ function ensurePort() {
 }
 function bindPort() { ensurePort(); try { port?.postMessage({ type: 'bind', target }); } catch {} }
 function clearTarget(message, help = '') {
-  target = null; focus = null; focusSequence = -1; selectedKey = ''; canUndo = false;
+  target = null; focus = null; focusSequence = -1; selectedKey = ''; showAllSources = false; canUndo = false;
   $('#overwrite').checked = false; bindPort();
   $('#connection-status').textContent = message;
   $('#connection-dot').classList.remove('connected');
@@ -60,10 +61,24 @@ function render() {
   $('#focus-card').classList.toggle('matched', Boolean(match.field || match.candidates?.length));
   $('#focus-current').textContent = focus?.current?.trim() ? `网页已有：${focus.current.slice(0, 200)}` : '';
   $('#focus-current').classList.toggle('hidden', !focus?.current?.trim());
+  const candidates = match.field ? [match.field] : match.candidates || [];
+  const candidateKeys = new Set(candidates.map(field => field.key));
+  const candidateOnly = candidates.length > 0 && !showAllSources;
   const source = $('#field-source');
-  source.replaceChildren(el('option', { value: '', text: focus ? (match.field ? '请选择资料' : match.reason || '请选择资料') : '先点击网页输入框' }));
-  for (const field of fields) source.append(el('option', { value: field.key, text: `${field.display}：${field.value.replace(/\n/g, ' ').slice(0, 40)}` }));
+  source.replaceChildren(el('option', { value: '', text: !focus ? '先点击网页输入框' : candidateOnly ? '请选择候选资料' : '请选择资料' }));
+  const option = field => el('option', { value: field.key, text: `${field.display}：${field.value.replace(/\n/g, ' ').slice(0, 40)}` });
+  if (candidateOnly) candidates.forEach(field => source.append(option(field)));
+  else if (candidates.length) {
+    source.append(el('optgroup', { label: '候选资料' }, candidates.map(option)));
+    const remaining = fields.filter(field => !candidateKeys.has(field.key));
+    if (remaining.length) source.append(el('optgroup', { label: '其他资料' }, remaining.map(option)));
+  } else fields.forEach(field => source.append(option(field)));
   source.value = selectedKey; source.disabled = !writable() || busy;
+  $('#source-scope').textContent = candidateOnly ? `当前仅显示 ${candidates.length} 项候选资料` : `当前显示全部 ${fields.length} 项资料`;
+  const toggle = $('#source-toggle');
+  toggle.classList.toggle('hidden', !candidates.length);
+  toggle.textContent = candidateOnly ? '从所有字段中选择' : '返回候选字段';
+  toggle.disabled = !writable() || busy;
   $('#field-preview').textContent = fields.find(f => f.key === selectedKey)?.value || '选择资料后在这里预览。';
   $('#fill').disabled = !selectedKey || !mayFill();
   $('#undo').disabled = !target || !canUndo || busy;
@@ -76,7 +91,7 @@ function acceptFocus(state) {
   focusSequence = state.sequence;
   const changed = focus?.token !== state.descriptor?.token || (!state.descriptor?.supported && focus?.id !== state.descriptor?.id);
   focus = state.descriptor; canUndo = state.canUndo;
-  if (changed) { selectedKey = matching().field?.key || ''; $('#overwrite').checked = false; operation('本机资料 · 提交由你完成'); }
+  if (changed) { selectedKey = matching().field?.key || ''; showAllSources = false; $('#overwrite').checked = false; operation('本机资料 · 提交由你完成'); }
   render();
   if (changed) $('.panel-main').scrollTo({ top: 0, behavior: 'instant' });
 }
@@ -157,6 +172,7 @@ function refreshProfile() {
   fields = profile ? flattenProfile(profile) : [];
   $('#field-count').textContent = `${fields.length} 项资料`;
   selectedKey = matching().field?.key || '';
+  showAllSources = false;
   $('#overwrite').checked = false; render();
 }
 function selectTab(name) {
@@ -173,6 +189,14 @@ $('#profile-select').addEventListener('change', refreshProfile);
 $('#search').addEventListener('input', renderCopy);
 $('#overwrite').addEventListener('change', render);
 $('#field-source').addEventListener('change', () => { selectedKey = $('#field-source').value; render(); });
+$('#source-toggle').addEventListener('click', () => {
+  showAllSources = !showAllSources;
+  if (!showAllSources) {
+    const match = matching(), candidates = match.field ? [match.field] : match.candidates || [];
+    if (!candidates.some(field => field.key === selectedKey)) selectedKey = match.field?.key || '';
+  }
+  render();
+});
 $('#fill').addEventListener('click', () => fill(selectedKey));
 $('#undo').addEventListener('click', undo);
 for (const name of ['copy', 'fill']) {
