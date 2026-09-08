@@ -6,6 +6,7 @@ const rules = {
   'basic.city': ['现居城市', '现居住地', '现居地', '居住城市', 'currentcity', 'cityofresidence'],
   'basic.gender': ['性别', 'gender', 'sex'],
   'basic.birthday': ['出生日期', '出生年月', '生日', 'dateofbirth', 'birthdate', 'birthday'],
+  'basic.idNumber': ['身份证号', '身份证号码', '居民身份证号码', '公民身份号码', '身份证', 'idnumber', 'idcardnumber', 'idcard', 'identitynumber', 'nationalidnumber', 'nationalid'],
   'basic.political': ['政治面貌', 'politicalstatus', 'politicalaffiliation'],
   'basic.hometown': ['籍贯', 'hometown'],
   'basic.position': ['求职意向', '意向职位', '意向岗位', '应聘职位', '应聘岗位', '期望职位', 'desiredposition', 'targetposition'],
@@ -35,7 +36,7 @@ const rules = {
   'projects.end': ['项目结束时间', 'projectend'],
   'projects.url': ['项目链接', '项目地址', 'projecturl'],
   'projects.description': ['项目描述', '项目内容', '项目介绍', '项目经历', 'projectdescription'],
-  'extras.summary': ['自我介绍', '自我评价', '个人简介', 'selfintroduction', 'aboutme', 'summary'],
+  'extras.summary': ['个人介绍', '自我介绍', '自我评价', '个人简介', 'personalintroduction', 'selfintroduction', 'aboutme', 'summary'],
   'extras.skills': ['专业技能', '技术技能', '技能特长', '技能', 'skills'],
   'extras.awards': ['荣誉奖项', '所获荣誉', '获奖情况', '奖项', 'awards', 'honors']
 };
@@ -50,12 +51,13 @@ export function matchField(descriptor, fields) {
   const hints = [descriptor.placeholder, descriptor.name, descriptor.id].map(normalize).filter(Boolean);
   for (const [kind, aliases] of Object.entries(rules)) {
     for (const alias of aliases.map(normalize)) {
+      const partial = kind !== 'basic.idNumber'; // Identity numbers need an exact hint, not ID type/expiry fields.
       if (explicit === alias) give(kind, 100);
       // Generic English identifiers such as "name" must match exactly.
-      else if (explicit.includes(alias) && (/[\u3400-\u9fff]/.test(alias) || alias.length > 5)) give(kind, 90);
+      else if (partial && explicit.includes(alias) && (/[\u3400-\u9fff]/.test(alias) || alias.length > 5)) give(kind, 90);
       for (const hint of hints) {
         if (hint === alias) give(kind, 80);
-        else if (hint.includes(alias) && (/[\u3400-\u9fff]/.test(alias) || alias.length > 5)) give(kind, 65);
+        else if (partial && hint.includes(alias) && (/[\u3400-\u9fff]/.test(alias) || alias.length > 5)) give(kind, 65);
       }
     }
   }

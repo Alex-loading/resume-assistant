@@ -17,6 +17,8 @@ Object.assign(profile.basic,{name:'林小满',phone:'13800000000',email:'xiaoman
 profile.education=[{...createRecord('education'),school:'示例大学',major:'软件工程',degree:'硕士',start:'2025-09',end:'2027-06'}];
 profile.work=[{...createRecord('work'),company:'示例科技',role:'前端实习生',start:'2026-04',end:'2026-08',description:'参与前端组件开发与性能优化。'}];
 profile.extras.skills='JavaScript / TypeScript / Vue 3\n前端工程与交互设计';profile.extras.summary='专注于前端开发，喜欢把复杂的问题变成清楚的界面。';
+const identityText='00000020000101000X'; // Deliberately invalid region code; never use a real identity number in tests.
+const introductionText='专注于前端开发与交互设计。\n参与过组件开发、性能优化和团队协作。';
 try {
   context=await chromium.launchPersistentContext('',{
     ...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{}),
@@ -42,6 +44,17 @@ try {
   await app.reload();assert.equal(await app.getByLabel('姓名',{exact:true}).inputValue(),'外部保存');
   await app.getByLabel('姓名',{exact:true}).fill('林小满');await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();
   checked('未修改页面关闭/重载时不覆盖更新的存储');
+  assert.equal(await app.getByLabel('身份证号',{exact:true}).getAttribute('type'),'text');
+  await app.getByLabel('身份证号',{exact:true}).fill(identityText);
+  await app.getByRole('button',{name:'常用长文本',exact:true}).click();
+  assert.equal(await app.getByLabel('个人介绍',{exact:true}).inputValue(),profile.extras.summary);
+  await app.getByLabel('个人介绍',{exact:true}).fill(introductionText);
+  await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();await app.reload();
+  assert.equal(await app.getByLabel('身份证号',{exact:true}).inputValue(),identityText);
+  await app.getByRole('button',{name:'常用长文本',exact:true}).click();
+  assert.equal(await app.getByLabel('个人介绍',{exact:true}).inputValue(),introductionText);
+  await app.screenshot({path:root+'artifacts/personal-introduction.png',fullPage:true});
+  checked('身份证号保留首位零和末尾 X，个人介绍沿用旧内容并支持多行保存');
   await app.getByRole('button',{name:'教育经历',exact:true}).click();
   const educationDetails={GPA:'3.8 / 4.0',成绩排名:'5 / 120',学院:'软件学院',导师:'示例导师'};
   for(const [label,value] of Object.entries(educationDetails)) await app.getByLabel(label,{exact:true}).fill(value);
@@ -67,6 +80,8 @@ try {
   await app.locator('#toast').filter({hasText:'已导入'}).waitFor();assert.equal(await app.locator('#profile-select option').count(),3);
   const downloadPromise=app.waitForEvent('download');await app.getByRole('button',{name:'备份导出'}).click();
   const download=await downloadPromise;const exported=JSON.parse(await readFile(await download.path(),'utf8'));assert.equal(exported.profiles.length,3);
+  assert.equal(exported.profiles.find(p=>p.id===store.activeId).basic.idNumber,identityText);
+  assert.equal(exported.profiles.find(p=>p.id===store.activeId).extras.summary,introductionText);
   checked('错误导入保护、追加导入和完整 JSON 备份');
   await app.locator('#profile-select').selectOption(store.activeId);await app.locator('#save-state').filter({hasText:'已保存'}).waitFor();
   await app.screenshot({path:root+'artifacts/workspace.png',fullPage:true});
@@ -146,6 +161,13 @@ try {
   await fillOne('[name=gender]','basic.0.gender','female');
   for(const [name,key,value] of [['gpa','gpa','3.8 / 4.0'],['academicRanking','ranking','5 / 120'],['college','college','软件学院'],['advisor','advisor','示例导师']]) await fillOne(`[name=${name}]`,`education.0.${key}`,value);
   checked('学历、性别下拉及 GPA、排名、学院、导师逐项定位填写');
+  for(const [name,key,value] of [['idNumber','basic.0.idNumber',identityText],['personalIntroduction','extras.0.summary',introductionText]]) {
+    await fillOne(`[name=${name}]`,key,value);
+    assert.deepEqual(await sourceKeys(),[key]);
+    assert.equal(await panel.locator(`.copy-item[data-field-key="${key}"] .copy-field`).count(),1);
+  }
+  await panel.screenshot({path:root+'artifacts/sidepanel-personal-introduction.png'});
+  checked('身份证号和个人介绍提供快捷复制入口、候选高亮及完整单项填写');
   await demo.locator('[name=emergencyName]').click();await panel.waitForFunction(()=>document.querySelector('#focus-label').textContent==='紧急联系人姓名');
   assert.equal(await panel.locator('.insert-field').count(),0);
   assert.equal(await demo.locator('[name=emergencyName]').inputValue(),'');

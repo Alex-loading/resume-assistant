@@ -6,7 +6,7 @@ export const sections = [
   { id: 'education', title: '教育经历', sub: '记录你的学习轨迹，优先填写最高学历。', icon: 'book' },
   { id: 'work', title: '实习与工作', sub: '把做过的事情，整理成清楚的经历。', icon: 'case' },
   { id: 'projects', title: '项目经历', sub: '留下能体现你能力的项目与贡献。', icon: 'code' },
-  { id: 'extras', title: '常用长文本', sub: '技能、自我介绍与荣誉，随时取用。', icon: 'text' }
+  { id: 'extras', title: '常用长文本', sub: '技能、个人介绍与荣誉，随时取用。', icon: 'text' }
 ];
 // [key, Chinese label, input type, placeholder]
 export const definitions = {
@@ -14,6 +14,7 @@ export const definitions = {
     ['name', '姓名', 'text', '你的真实姓名'], ['phone', '手机号码', 'tel', '常用联系电话'],
     ['email', '电子邮箱', 'email', '用于接收招聘通知'], ['city', '现居城市', 'text', '如：南京'],
     ['gender', '性别', 'text', '选填'], ['birthday', '出生日期', 'date', ''],
+    ['idNumber', '身份证号', 'text', '选填，请按证件填写（含末尾字母 X）'],
     ['political', '政治面貌', 'text', '选填'], ['hometown', '籍贯', 'text', '选填'],
     ['position', '求职意向', 'text', '如：前端开发工程师'], ['targetCity', '期望城市', 'text', '如：上海'],
     ['website', '个人网站', 'url', 'https://'], ['github', 'GitHub', 'url', 'https://github.com/…']
@@ -39,7 +40,7 @@ export const definitions = {
     ['url', '项目链接', 'url', 'https://'], ['description', '项目描述', 'textarea', '背景、技术方案与个人贡献']
   ],
   extras: [
-    ['summary', '自我介绍', 'textarea', '用一段话介绍你的方向和优势'],
+    ['summary', '个人介绍', 'textarea', '用一段话介绍你的方向和优势，可用于自我介绍或自我评价'],
     ['skills', '专业技能', 'textarea', '按方向整理技术栈和熟练程度'],
     ['awards', '荣誉奖项', 'textarea', '奖学金、竞赛、资格证书等']
   ]
